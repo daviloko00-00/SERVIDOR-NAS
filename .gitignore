@@ -1,0 +1,39 @@
+# --- Dependências do Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Variáveis de Ambiente (SEGURANÇA!) ---
+.env
+.env.test
+.env.local
+
+# --- Banco de Dados Local ---
+# Se você ainda tiver o SQLite do teste inicial
+*.db
+*.db-journal
+
+# --- Arquivos do Prisma ---
+/prisma/migrations/
+# Se usar o Prisma 7, ignore o cache de geração se necessário
+.prisma/
+
+# --- Armazenamento NAS (Arquivos de Upload) ---
+# Ignora todos os arquivos dentro de uploads para não subir 
+# seus backups pessoais para o código-fonte
+src/uploads/*
+# Mantém a pasta mas ignora o conteúdo
+!src/uploads/.gitkeep
+
+# --- Sistema e IDEs ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+dist/
+build/
+
+# --- Logs ---
+logs
+*.log

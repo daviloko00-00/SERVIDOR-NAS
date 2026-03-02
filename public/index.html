@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Cloud NAS - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen font-sans">
+
+    <div id="loginSection" class="flex items-center justify-center min-h-screen">
+        <div class="bg-slate-900 p-8 rounded-2xl shadow-2xl border border-slate-800 w-96">
+            <h1 class="text-2xl font-bold text-blue-500 mb-6 text-center">Acesse seu NAS</h1>
+            <div class="space-y-4">
+                <input type="text" id="user" placeholder="Usuário" class="w-full bg-slate-800 border-none rounded-lg p-3 focus:ring-2 focus:ring-blue-500 text-white outline-none">
+                <input type="password" id="pass" placeholder="Senha" class="w-full bg-slate-800 border-none rounded-lg p-3 focus:ring-2 focus:ring-blue-500 text-white outline-none">
+                <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold transition">Entrar</button>
+            </div>
+            <p id="loginError" class="text-red-500 text-sm mt-4 hidden text-center">Credenciais inválidas.</p>
+        </div>
+    </div>
+
+    <div id="dashSection" class="hidden p-8 max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-12 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white">Cloud <span class="text-blue-500">NAS</span></h1>
+                <p class="text-slate-400 font-mono text-sm">MySQL Database Connected</p>
+            </div>
+            <button onclick="logout()" class="bg-slate-800 hover:bg-red-900/40 px-4 py-2 rounded-lg transition border border-slate-700">Sair</button>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 h-fit sticky top-8">
+                <h2 class="text-lg font-semibold mb-4 flex items-center">📤 Upload de Arquivo</h2>
+                <input type="file" id="fileInput" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 cursor-pointer">
+                <button onclick="uploadFile()" id="uploadBtn" class="mt-6 w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg transition disabled:opacity-50 font-bold">Enviar para Nuvem</button>
+                <div id="progress" class="mt-4 text-xs text-blue-400 hidden animate-pulse italic font-mono text-center">Processando Backup...</div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <h2 class="text-lg font-semibold mb-4">Meus Arquivos no Servidor</h2>
+                <div id="fileList" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // --- AUTH CONTROL ---
+        function checkAuth() {
+            const token = localStorage.getItem('nas_token');
+            if (token) {
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('dashSection').classList.remove('hidden');
+                fetchFiles();
+            } else {
+                document.getElementById('loginSection').classList.remove('hidden');
+                document.getElementById('dashSection').classList.add('hidden');
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('user').value;
+            const password = document.getElementById('pass').value;
+
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+                if (data.token) {
+                    localStorage.setItem('nas_token', data.token);
+                    document.getElementById('loginError').classList.add('hidden');
+                    checkAuth();
+                } else {
+                    document.getElementById('loginError').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert("Erro ao conectar com o servidor.");
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('nas_token');
+            checkAuth();
+        }
+
+        // --- FILE OPERATIONS ---
+        async function uploadFile() {
+            const input = document.getElementById('fileInput');
+            const btn = document.getElementById('uploadBtn');
+            const prog = document.getElementById('progress');
+            
+            if (!input.files[0]) return alert("Selecione um arquivo!");
+
+            btn.disabled = true;
+            prog.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+
+            const res = await fetch('/files/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('nas_token')}` },
+                body: formData
+            });
+
+            if (res.ok) {
+                input.value = '';
+                // O socket atualizará a lista automaticamente
+            } else {
+                alert("Falha no upload.");
+            }
+            
+            btn.disabled = false;
+            prog.classList.add('hidden');
+        }
+
+        async function fetchFiles() {
+            const res = await fetch('/files', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('nas_token')}` }
+            });
+            const files = await res.json();
+            const container = document.getElementById('fileList');
+            
+            if (files.length === 0) {
+                container.innerHTML = `<p class="text-slate-500 italic col-span-2 text-center py-10">Nenhum arquivo encontrado.</p>`;
+                return;
+            }
+
+            container.innerHTML = files.map(f => `
+                <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 hover:border-blue-500/40 transition flex flex-col justify-between min-h-[140px]">
+                    <div class="flex flex-col">
+                        <span class="truncate font-medium text-slate-100 text-sm" title="${f.name}">${f.name}</span>
+                        <span class="text-[10px] uppercase text-slate-500 font-mono mt-1">${(f.size/1024).toFixed(1)} KB</span>
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                        <button onclick="downloadFile(${f.id}, '${f.name}')" class="flex-1 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 text-xs py-2 rounded-lg border border-blue-600/20 transition font-bold">
+                            Download ↓
+                        </button>
+                        <button onclick="deleteFile(${f.id})" class="bg-red-900/10 hover:bg-red-900/30 text-red-500 px-3 py-2 rounded-lg border border-red-900/20 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function downloadFile(id, fileName) {
+            try {
+                const res = await fetch(`/files/download/${id}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('nas_token')}` }
+                });
+                
+                if (!res.ok) throw new Error();
+
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (err) {
+                alert("Erro ao baixar o arquivo.");
+            }
+        }
+
+        async function deleteFile(id) {
+            if (!confirm("Remover este arquivo permanentemente do MySQL e do Disco?")) return;
+            await fetch(`/files/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('nas_token')}` }
+            });
+        }
+
+        // --- REAL-TIME UPDATES ---
+        socket.on('fileUpdate', (data) => {
+            fetchFiles(); 
+        });
+
+        checkAuth();
+    </script>
+</body>
+</html>
