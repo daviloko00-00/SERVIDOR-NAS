@@ -19,9 +19,17 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   const { username, password } = req.body;
+  console.log("Tentativa de login para:", username); // DEDO-DURO 1
   try {
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      console.log("Usuário não encontrado no banco!"); // DEDO-DURO 2
+      return res.status(401).json({ error: "Credenciais inválidas" });
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    console.log("Senha confere?", isMatch); // DEDO-DURO 3
+
+    if (!isMatch) {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
