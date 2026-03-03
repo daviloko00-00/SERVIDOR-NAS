@@ -5,9 +5,9 @@ yarn-debug.log*
 yarn-error.log*
 
 # --- Variáveis de Ambiente (SEGURANÇA!) ---
-.env
-.env.test
-.env.local
+#.env
+#.env.test
+#.env.local
 
 # --- Banco de Dados Local ---
 # Se você ainda tiver o SQLite do teste inicial

@@ -13,12 +13,13 @@ app.use(express.json());
 // Configuração de Armazenamento NAS
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const userDir = `./src/uploads/${req.user.id}`;
+    const userDir = path.join('./src/uploads', String(req.user.id));
     if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
     cb(null, userDir);
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
+    const sanitizedName = path.basename(file.originalname).replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, Date.now() + '-' + sanitizedName);
   }
 });
 
@@ -29,12 +30,17 @@ const auth = require('./middlewares/auth');
 
 // Registro de Usuário
 app.post('/auth/register', async (req, res) => {
-  const { username, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
   try {
+    const { username, password } = req.body;
+    if (!username || !password || password.length < 6) {
+      return res.status(400).json({ error: "Username e password (mín 6 caracteres) são obrigatórios" });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({ data: { username, password: hashedPassword } });
     res.json({ message: "Usuário criado!", id: user.id });
-  } catch (e) { res.status(400).json({ error: "Usuário já existe" }); }
+  } catch (e) {
+    res.status(400).json({ error: "Usuário já existe ou erro ao criar" });
+  }
 });
 
 // Login
@@ -50,19 +56,27 @@ app.post('/auth/login', async (req, res) => {
 
 // Upload de Arquivo
 app.post('/files/upload', auth, upload.single('file'), async (req, res) => {
-  const fileData = await prisma.file.create({
-    data: {
-      name: req.file.originalname,
-      path: req.file.path,
-      size: req.file.size,
-      mimeType: req.file.mimetype,
-      userId: req.user.id
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Nenhum arquivo enviado" });
     }
-  });
-  
-  // Notifica via Socket que um novo arquivo subiu
-  req.io.emit('fileUpdate', { action: 'upload', file: fileData.name });
-  res.json(fileData);
+    const filePath = path.join(req.file.destination, req.file.filename);
+    const fileData = await prisma.file.create({
+      data: {
+        name: req.file.originalname,
+        path: filePath,
+        size: req.file.size,
+        mimeType: req.file.mimetype,
+        userId: req.user.id
+      }
+    });
+    
+    // Notifica via Socket que um novo arquivo subiu
+    if (req.io) req.io.emit('fileUpdate', { action: 'upload', file: fileData.name });
+    res.json(fileData);
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao fazer upload do arquivo" });
+  }
 });
 
 // Listar Arquivos
@@ -73,14 +87,24 @@ app.get('/files', auth, async (req, res) => {
 
 // Deletar Arquivo
 app.delete('/files/:id', auth, async (req, res) => {
-  const file = await prisma.file.findFirst({ where: { id: parseInt(req.params.id), userId: req.user.id } });
-  if (!file) return res.status(404).json({ error: "Arquivo não encontrado" });
-  
-  fs.unlinkSync(file.path); // Remove do disco
-  await prisma.file.delete({ where: { id: file.id } });
-  
-  req.io.emit('fileUpdate', { action: 'delete', file: file.name });
-  res.json({ message: "Removido com sucesso" });
+  try {
+    const fileId = parseInt(req.params.id);
+    if (isNaN(fileId)) {
+      return res.status(400).json({ error: "ID de arquivo inválido" });
+    }
+    const file = await prisma.file.findFirst({ where: { id: fileId, userId: req.user.id } });
+    if (!file) return res.status(404).json({ error: "Arquivo não encontrado" });
+    
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path); // Remove do disco
+    }
+    await prisma.file.delete({ where: { id: file.id } });
+    
+    if (req.io) req.io.emit('fileUpdate', { action: 'delete', file: file.name });
+    res.json({ message: "Removido com sucesso" });
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao deletar arquivo" });
+  }
 });
 
 module.exports = app;
