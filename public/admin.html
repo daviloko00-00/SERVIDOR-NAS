@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+<meta charset="UTF-8">
+<title>Admin - Cloud NAS</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+</head>
+
+<body class="bg-slate-950 text-slate-200 min-h-screen p-10 font-sans">
+
+<div class="max-w-6xl mx-auto">
+
+<h1 class="text-3xl font-bold mb-8 text-white">
+Administração <span class="text-purple-500">de Usuários</span>
+</h1>
+<button id="adminBtn"
+onclick="goHome()"
+class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg transition hidden">
+Admin
+</button>
+
+
+<!-- CRIAR USUÁRIO -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-10">
+
+<h2 class="text-xl font-semibold mb-6 text-purple-400">
+Criar novo usuário
+</h2>
+
+<div class="grid md:grid-cols-4 gap-4">
+
+<input id="newUser"
+placeholder="Usuário"
+class="bg-slate-800 p-3 rounded-lg outline-none focus:ring-2 focus:ring-purple-500">
+
+<input id="newPass"
+type="password"
+placeholder="Senha"
+class="bg-slate-800 p-3 rounded-lg outline-none focus:ring-2 focus:ring-purple-500">
+
+<select id="newRole"
+class="bg-slate-800 p-3 rounded-lg outline-none">
+
+<option value="USER">USER</option>
+<option value="ADMIN">ADMIN</option>
+
+</select>
+
+<label class="flex items-center gap-2 text-sm">
+
+<input type="checkbox"
+id="newWrite"
+checked
+class="accent-purple-500">
+
+Permissão de escrita
+
+</label>
+
+</div>
+
+<button
+onclick="createUser()"
+class="mt-6 bg-purple-600 hover:bg-purple-500 px-6 py-2 rounded-lg font-bold transition">
+
+Criar usuário
+
+</button>
+
+</div>
+
+
+<!-- LISTA DE USUÁRIOS -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+
+<h2 class="text-xl font-semibold mb-6 text-purple-400">
+
+Usuários do Sistema
+
+</h2>
+
+<div id="userList" class="space-y-3"></div>
+
+</div>
+
+</div>
+
+
+<script>
+
+async function fetchUsers(){
+
+const res = await fetch('/admin/users',{
+headers:{
+'Authorization':'Bearer '+localStorage.getItem('nas_token')
+}
+});
+
+const users = await res.json();
+
+const container = document.getElementById("userList");
+
+container.innerHTML = users.map(u=>`
+
+<div class="flex items-center justify-between bg-slate-800 p-4 rounded-lg border border-slate-700">
+
+<div class="flex items-center gap-4">
+
+<span class="font-bold text-white">${u.username}</span>
+
+<select
+class="bg-slate-700 px-2 py-1 rounded"
+onchange="updateUser(${u.id},this.value,'role')">
+
+<option value="USER" ${u.role==="USER"?"selected":""}>USER</option>
+<option value="ADMIN" ${u.role==="ADMIN"?"selected":""}>ADMIN</option>
+
+</select>
+
+<label class="flex items-center gap-1 text-sm">
+
+<input
+type="checkbox"
+class="accent-purple-500"
+${u.canWrite?"checked":""}
+onchange="updateUser(${u.id},this.checked,'canWrite')">
+
+Write
+
+</label>
+
+</div>
+
+<button
+onclick="deleteUser(${u.id})"
+class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-sm">
+
+Excluir
+
+</button>
+
+</div>
+
+`).join("");
+
+}
+
+
+
+async function createUser(){
+
+const username = document.getElementById("newUser").value;
+const password = document.getElementById("newPass").value;
+const role = document.getElementById("newRole").value;
+const canWrite = document.getElementById("newWrite").checked;
+
+await fetch('/admin/users',{
+method:'POST',
+headers:{
+'Content-Type':'application/json',
+'Authorization':'Bearer '+localStorage.getItem('nas_token')
+},
+body:JSON.stringify({username,password,role,canWrite})
+});
+
+fetchUsers();
+
+}
+
+
+
+async function updateUser(id,value,type){
+
+const body = {};
+
+body[type] = value;
+
+await fetch('/admin/users/'+id,{
+method:'PUT',
+headers:{
+'Content-Type':'application/json',
+'Authorization':'Bearer '+localStorage.getItem('nas_token')
+},
+body:JSON.stringify(body)
+});
+
+}
+
+
+
+async function deleteUser(id){
+
+if(!confirm("Excluir usuário?")) return;
+
+await fetch('/admin/users/'+id,{
+method:'DELETE',
+headers:{
+'Authorization':'Bearer '+localStorage.getItem('nas_token')
+}
+});
+
+fetchUsers();
+
+}
+
+function goHome(){
+
+window.location.href="/index.html";
+
+}
+
+fetchUsers();
+
+</script>
+
+</body>
+
+</html>

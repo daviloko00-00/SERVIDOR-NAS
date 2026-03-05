@@ -18,23 +18,64 @@ export const register = async (req, res) => {
 };
 
 export const login = async (req, res) => {
+
   const { username, password } = req.body;
-  console.log("Tentativa de login para:", username); // DEDO-DURO 1
+
+  console.log("Tentativa de login para:", username);
+
   try {
-    const user = await prisma.user.findUnique({ where: { username } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      console.log("Usuário não encontrado no banco!"); // DEDO-DURO 2
+
+    const user = await prisma.user.findUnique({
+      where: { username }
+    });
+
+    if (!user) {
+      console.log("Usuário não encontrado no banco!");
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
+
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log("Senha confere?", isMatch); // DEDO-DURO 3
+    console.log("Senha confere?", isMatch);
 
     if (!isMatch) {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+
+    // TOKEN COMPLETO
+    const token = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        canWrite: user.canWrite
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
+
     res.json({ token });
+
   } catch (err) {
+
+    console.error(err);
     res.status(500).json({ error: "Erro interno no servidor" });
+
+  }
+
+};
+export const me = async (req, res) => {
+  try {
+
+    res.json({
+      id: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      canWrite: req.user.canWrite
+    });
+
+  } catch (error) {
+
+    res.status(500).json({ error: "Erro ao obter usuário" });
+
   }
 };
